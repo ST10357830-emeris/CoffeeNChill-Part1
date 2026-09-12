@@ -1,0 +1,8 @@
+bin/
+obj/
+.git/
+.gitignore
+.vscode/
+local.settings.json
+README.md
+docs/
