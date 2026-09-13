@@ -43,7 +43,7 @@ $storage = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKe
 docker run --name coffeenchill-functions --network coffeenchill-network -p 7071:80 -e AzureWebJobsStorage=$storage -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e FUNCTIONS_WORKER_RUNTIME_VERSION=8.0 -e AzureFunctionsJobHost__Logging__Console__IsEnabled=true <dockerhub-username>/coffeenchill-functions:v1.0
 ```
 
-Azurite emulates Blob, Queue, and Table storage, but it does not emulate Azure Files. The menu endpoints can therefore run fully against Azurite; use a real Azure Storage account for the `staff-docs` file-share endpoints.
+Azurite emulates Blob, Queue, and Table storage, but it does not emulate Azure Files. The menu endpoints can therefore run fully against Azurite. For the `staff-docs` endpoints, create an Azure Storage account and a File Share named `staff-docs`, then pass the complete Azure Storage connection string as `AzureWebJobsStorage` when running the Functions container. Do not combine Azurite endpoints with the Azure File endpoint.
 
 Push the image after replacing the Docker Hub username:
 
@@ -51,6 +51,8 @@ Push the image after replacing the Docker Hub username:
 docker login
 docker push <dockerhub-username>/coffeenchill-functions:v1.0
 ```
+
+Published image: https://hub.docker.com/r/khwinana/coffeenchill-functions/tags
 
 Publish the Azurite image reference used by the demonstration as `<dockerhub-username>/coffeenchill-azurite:v1.0` only if your team tags and pushes a copy of the official image.
 
