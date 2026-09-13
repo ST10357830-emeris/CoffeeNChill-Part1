@@ -15,13 +15,13 @@ namespace CoffeeNChill.Functions
     public class MenuFunctions
     {
         // Logger instance injected via Dependency Injection
-        private readonly ILogger _logger;
+        private readonly ILogger<MenuFunctions> _logger;
 
         // Name of the target Azure Storage Table specified in assignment instructions
         private const string TableName = "MenuItems";
 
         // Constructor receiving ILogger dependency from isolated host runner
-        public MenuFunctions(ILogger logger)
+        public MenuFunctions(ILogger<MenuFunctions> logger)
         {
             _logger = logger;
         }

@@ -15,12 +15,12 @@ namespace CoffeeNChill.Functions
 {
     public class DocumentFunctions
     {
-        private readonly ILogger _logger;
+        private readonly ILogger<DocumentFunctions> _logger;
 
         // Target Azure File Share specified in assignment specification
         private const string ShareName = "staff-docs";
 
-        public DocumentFunctions(ILogger logger)
+        public DocumentFunctions(ILogger<DocumentFunctions> logger)
         {
             _logger = logger;
         }

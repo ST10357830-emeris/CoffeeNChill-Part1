@@ -15,7 +15,8 @@ Start Azurite as a standalone container. Azurite's default ports are Blob `10000
 
 ```powershell
 docker pull mcr.microsoft.com/azure-storage/azurite
-docker run --name coffeenchill-azurite -p 10000:10000 -p 10001:10001 -p 10002:10002 mcr.microsoft.com/azure-storage/azurite
+docker network create coffeenchill-network
+docker run --name coffeenchill-azurite --network coffeenchill-network -p 10000:10000 -p 10001:10001 -p 10002:10002 mcr.microsoft.com/azure-storage/azurite
 ```
 
 The checked-in `local.settings.json` uses `UseDevelopmentStorage=true`, which is suitable when Functions Core Tools runs on the host. Start the Functions project with:
@@ -35,12 +36,14 @@ Build the standalone image from this directory:
 docker build -t <dockerhub-username>/coffeenchill-functions:v1.0 .
 ```
 
-When the Functions container connects to the Azurite container through Docker Desktop on Windows, use `host.docker.internal` in the storage endpoints:
+When the Functions container connects to the Azurite container, use the Azurite container name in the storage endpoints:
 
 ```powershell
-$storage = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFeqCnf2g==;BlobEndpoint=http://host.docker.internal:10000/devstoreaccount1;QueueEndpoint=http://host.docker.internal:10001/devstoreaccount1;TableEndpoint=http://host.docker.internal:10002/devstoreaccount1;FileEndpoint=http://host.docker.internal:10000/devstoreaccount1;"
-docker run --name coffeenchill-functions -p 7071:80 -e AzureWebJobsStorage=$storage -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated <dockerhub-username>/coffeenchill-functions:v1.0
+$storage = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://coffeenchill-azurite:10000/devstoreaccount1;QueueEndpoint=http://coffeenchill-azurite:10001/devstoreaccount1;TableEndpoint=http://coffeenchill-azurite:10002/devstoreaccount1;FileEndpoint=https://<azure-file-account>.file.core.windows.net;"
+docker run --name coffeenchill-functions --network coffeenchill-network -p 7071:80 -e AzureWebJobsStorage=$storage -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e FUNCTIONS_WORKER_RUNTIME_VERSION=8.0 -e AzureFunctionsJobHost__Logging__Console__IsEnabled=true <dockerhub-username>/coffeenchill-functions:v1.0
 ```
+
+Azurite emulates Blob, Queue, and Table storage, but it does not emulate Azure Files. The menu endpoints can therefore run fully against Azurite; use a real Azure Storage account for the `staff-docs` file-share endpoints.
 
 Push the image after replacing the Docker Hub username:
 

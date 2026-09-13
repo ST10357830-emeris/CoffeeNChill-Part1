@@ -9,6 +9,8 @@ var host = new HostBuilder()
     // Register custom services into the Dependency Injection (DI) container
     .ConfigureServices(services =>
     {
+        // Register the worker telemetry SDK before enabling Functions Application Insights integration
+        services.AddApplicationInsightsTelemetryWorkerService();
         // Adds telemetry processing features specifically tailored for isolated worker processes
         services.ConfigureFunctionsApplicationInsights();
     })
