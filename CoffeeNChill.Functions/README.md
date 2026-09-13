@@ -39,11 +39,18 @@ docker build -t <dockerhub-username>/coffeenchill-functions:v1.0 .
 When the Functions container connects to the Azurite container, use the Azurite container name in the storage endpoints:
 
 ```powershell
-$storage = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://coffeenchill-azurite:10000/devstoreaccount1;QueueEndpoint=http://coffeenchill-azurite:10001/devstoreaccount1;TableEndpoint=http://coffeenchill-azurite:10002/devstoreaccount1;FileEndpoint=https://<azure-file-account>.file.core.windows.net;"
+$storage = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://coffeenchill-azurite:10000/devstoreaccount1;QueueEndpoint=http://coffeenchill-azurite:10001/devstoreaccount1;TableEndpoint=http://coffeenchill-azurite:10002/devstoreaccount1;"
 docker run --name coffeenchill-functions --network coffeenchill-network -p 7071:80 -e AzureWebJobsStorage=$storage -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e FUNCTIONS_WORKER_RUNTIME_VERSION=8.0 -e AzureFunctionsJobHost__Logging__Console__IsEnabled=true <dockerhub-username>/coffeenchill-functions:v1.0
 ```
 
 Azurite emulates Blob, Queue, and Table storage, but it does not emulate Azure Files. The menu endpoints can therefore run fully against Azurite. For the `staff-docs` endpoints, create an Azure Storage account and a File Share named `staff-docs`, then pass the complete Azure Storage connection string as `AzureWebJobsStorage` when running the Functions container. Do not combine Azurite endpoints with the Azure File endpoint.
+
+For the document endpoints, replace `$storage` with the complete connection string from that Azure Storage account before starting the Functions container:
+
+```powershell
+$storage = "<azure-storage-connection-string>"
+docker run --name coffeenchill-functions --network coffeenchill-network -p 7071:80 -e AzureWebJobsStorage=$storage -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e FUNCTIONS_WORKER_RUNTIME_VERSION=8.0 <dockerhub-username>/coffeenchill-functions:v1.0
+```
 
 Push the image after replacing the Docker Hub username:
 
