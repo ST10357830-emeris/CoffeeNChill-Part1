@@ -33,13 +33,13 @@ Publish the project, then build the standalone image from this directory:
 
 ```powershell
 dotnet publish --configuration Release
-docker build -t <dockerhub-username>/coffeenchill-functions:v1.0 .
+docker build -t <dockerhub-username>/coffeenchill-functions:v1.1 .
 ```
 
 The Functions Dockerfile contains the Azurite connection string using `host.docker.internal`, so no connection string or `--network` option is needed when starting the Functions container:
 
 ```powershell
-docker run --name coffeenchill-functions -p 7071:80 <dockerhub-username>/coffeenchill-functions:v1.0
+docker run --name coffeenchill-functions -p 7071:80 <dockerhub-username>/coffeenchill-functions:v1.1
 ```
 
 The `staff-docs` Blob container is created automatically when the upload, list, or download endpoint is first called.
@@ -48,10 +48,17 @@ Push the image after replacing the Docker Hub username:
 
 ```powershell
 docker login
-docker push <dockerhub-username>/coffeenchill-functions:v1.0
+docker push <dockerhub-username>/coffeenchill-functions:v1.1
 ```
 
 Published image: https://hub.docker.com/r/khwinana/coffeenchill-functions/tags
+
+The current rubric-complete build is also tagged `v1.1`:
+
+```powershell
+docker tag <dockerhub-username>/coffeenchill-functions:v1.1 <dockerhub-username>/coffeenchill-functions:latest
+docker push <dockerhub-username>/coffeenchill-functions:latest
+```
 
 For the assignment demonstration, use the official Azurite image directly. If your team must publish a tagged copy, tag and push it as `<dockerhub-username>/coffeenchill-azurite:v1.0`.
 
@@ -84,6 +91,21 @@ Example menu item JSON:
 ## Postman
 
 Import `docs/CoffeeNChill-Part1.postman_collection.json` into Postman. Set `baseUrl` to `http://localhost:7071/api` and set `filePath` to a local PDF or document before running the upload request. The collection covers every required menu and document endpoint.
+
+Run the `Menu` folder in this order: create, get all, category filter, update, delete, then invalid menu item. Run the `Documents` folder in this order: upload a PDF or text file, list documents, download the uploaded blob, then run the unsupported document type request with a `.gif` file. The saved tests verify success responses, structured 400 errors, metadata, and Blob MIME headers.
+
+## Demonstration video sequence
+
+1. Show the repository, Dockerfile, Postman collection folders, and Docker Hub tags `v1.0` and `v1.1`.
+2. Run Azurite in its own container with `docker run` and show ports `10000`, `10001`, and `10002`.
+3. Run the Functions image independently with `docker run -p 7071:80` and no connection-string argument.
+4. Show the Functions host listing all eight HTTP functions.
+5. Run the five menu requests in Postman and show the saved tests passing.
+6. Upload a PDF or text document and show the response containing filename, size, content type, and upload time.
+7. List documents and show size, content type, upload time, and last modified time.
+8. Download the blob and show the response content type and downloaded file.
+9. Run the invalid menu, missing item, and unsupported MIME requests and show the 400/404 tests passing.
+10. Show the public GitHub repository and Docker Hub image page.
 
 ## Submission checklist
 

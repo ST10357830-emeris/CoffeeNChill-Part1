@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
@@ -18,6 +19,13 @@ namespace CoffeeNChill.Functions
 
         // Target Azure Blob container specified in the project addendum
         private const string ContainerName = "staff-docs";
+        private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "application/pdf",
+            "text/plain",
+            "image/jpeg",
+            "image/png"
+        };
 
         public DocumentFunctions(ILogger<DocumentFunctions> logger)
         {
@@ -37,6 +45,14 @@ namespace CoffeeNChill.Functions
             await containerClient.CreateIfNotExistsAsync();
 
             return containerClient;
+        }
+
+        private static async Task<HttpResponseData> ErrorResponseAsync(HttpRequestData req, HttpStatusCode statusCode, string message)
+        {
+            var response = req.CreateResponse(statusCode);
+            await response.WriteAsJsonAsync(new { Error = message });
+            response.StatusCode = statusCode;
+            return response;
         }
 
         // 1. POST /api/documents/upload (UploadStaffDocument)
@@ -63,6 +79,19 @@ namespace CoffeeNChill.Functions
 
                 // Extract original filename
                 string fileName = Path.GetFileName(file.FileName);
+                string contentType = string.IsNullOrWhiteSpace(file.ContentType)
+                    ? "application/octet-stream"
+                    : file.ContentType;
+
+                if (string.IsNullOrWhiteSpace(fileName) || !string.Equals(fileName, file.FileName, StringComparison.Ordinal))
+                {
+                    return await ErrorResponseAsync(req, HttpStatusCode.BadRequest, "A valid file name is required.");
+                }
+
+                if (!AllowedContentTypes.Contains(contentType))
+                {
+                    return await ErrorResponseAsync(req, HttpStatusCode.BadRequest, "Only PDF, text, JPEG, or PNG documents are supported.");
+                }
 
                 var containerClient = await GetContainerClientAsync();
 
@@ -71,7 +100,10 @@ namespace CoffeeNChill.Functions
                 file.Data.Position = 0;
 
                 // Stream file binary content directly into Azure Blob Storage
-                await blobClient.UploadAsync(file.Data, overwrite: true);
+                await blobClient.UploadAsync(file.Data, new BlobUploadOptions
+                {
+                    HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
+                });
 
                 var response = req.CreateResponse(HttpStatusCode.OK);
                 await response.WriteAsJsonAsync(new
@@ -79,6 +111,7 @@ namespace CoffeeNChill.Functions
                     Message = "File uploaded successfully to staff-docs blob container.",
                     FileName = fileName,
                     SizeBytes = file.Data.Length,
+                    ContentType = contentType,
                     UploadedAt = DateTimeOffset.UtcNow
                 });
 
@@ -112,6 +145,8 @@ namespace CoffeeNChill.Functions
                     {
                         FileName = item.Name,
                         SizeBytes = item.Properties.ContentLength,
+                        ContentType = item.Properties.ContentType,
+                        UploadedAt = item.Properties.CreatedOn,
                         LastModified = item.Properties.LastModified
                     });
                 }

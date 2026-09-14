@@ -19,6 +19,9 @@ namespace CoffeeNChill.Functions
 
         // Name of the target Azure Storage Table specified in assignment instructions
         private const string TableName = "MenuItems";
+        private const string MenuItemNotFoundMessage = "Menu item not found.";
+        private const int MaxTextLength = 250;
+        private const double MaxPrice = 10000;
 
         // Constructor receiving ILogger dependency from isolated host runner
         public MenuFunctions(ILogger<MenuFunctions> logger)
@@ -43,6 +46,110 @@ namespace CoffeeNChill.Functions
             return client;
         }
 
+        private static async Task<HttpResponseData> ErrorResponseAsync(HttpRequestData req, HttpStatusCode statusCode, string message)
+        {
+            var response = req.CreateResponse(statusCode);
+            await response.WriteAsJsonAsync(new { Error = message });
+            response.StatusCode = statusCode;
+            return response;
+        }
+
+        private static string? ValidateMenuItem(MenuItemEntity? item)
+        {
+            if (item == null) return "A JSON menu item is required.";
+            if (string.IsNullOrWhiteSpace(item.PartitionKey) || item.PartitionKey.Length > MaxTextLength)
+            {
+                return $"PartitionKey (Category) is required and must be {MaxTextLength} characters or fewer.";
+            }
+            if (string.IsNullOrWhiteSpace(item.RowKey) || item.RowKey.Length > MaxTextLength)
+            {
+                return $"RowKey (SKU) is required and must be {MaxTextLength} characters or fewer.";
+            }
+            if (string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > MaxTextLength)
+            {
+                return $"Name is required and must be {MaxTextLength} characters or fewer.";
+            }
+            if (item.Description?.Length > MaxTextLength)
+            {
+                return $"Description must be {MaxTextLength} characters or fewer.";
+            }
+            if (double.IsNaN(item.Price) || double.IsInfinity(item.Price) || item.Price < 0 || item.Price > MaxPrice)
+            {
+                return $"Price must be between 0 and {MaxPrice}.";
+            }
+
+            return null;
+        }
+
+        private static JsonElement? FindProperty(JsonElement updateData, string propertyName)
+        {
+            foreach (var property in updateData.EnumerateObject())
+            {
+                if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return property.Value;
+                }
+            }
+
+            return null;
+        }
+
+        private static string? ApplyPriceUpdate(MenuItemEntity entity, JsonElement updateData)
+        {
+            var price = FindProperty(updateData, "price");
+            if (price.HasValue && (price.Value.ValueKind != JsonValueKind.Number || !price.Value.TryGetDouble(out var priceValue) || double.IsNaN(priceValue) || double.IsInfinity(priceValue) || priceValue < 0 || priceValue > MaxPrice))
+            {
+                return $"Price must be between 0 and {MaxPrice}.";
+            }
+            if (price.HasValue) entity.Price = price.Value.GetDouble();
+            return null;
+        }
+
+        private static string? ApplyAvailabilityUpdate(MenuItemEntity entity, JsonElement updateData)
+        {
+            var isAvailable = FindProperty(updateData, "isAvailable");
+            if (isAvailable.HasValue && isAvailable.Value.ValueKind != JsonValueKind.True && isAvailable.Value.ValueKind != JsonValueKind.False)
+            {
+                return "IsAvailable must be a Boolean.";
+            }
+            if (isAvailable.HasValue) entity.IsAvailable = isAvailable.Value.GetBoolean();
+            return null;
+        }
+
+        private static string? ApplyNameUpdate(MenuItemEntity entity, JsonElement updateData)
+        {
+            var name = FindProperty(updateData, "name");
+            if (name.HasValue && (name.Value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(name.Value.GetString()) || name.Value.GetString()!.Length > MaxTextLength))
+            {
+                return $"Name must be a non-empty string of {MaxTextLength} characters or fewer.";
+            }
+            if (name.HasValue) entity.Name = name.Value.GetString()!;
+            return null;
+        }
+
+        private static string? ApplyDescriptionUpdate(MenuItemEntity entity, JsonElement updateData)
+        {
+            var description = FindProperty(updateData, "description");
+            if (description.HasValue && (description.Value.ValueKind != JsonValueKind.String || description.Value.GetString()!.Length > MaxTextLength))
+            {
+                return $"Description must be a string of {MaxTextLength} characters or fewer.";
+            }
+            if (description.HasValue && !string.IsNullOrWhiteSpace(description.Value.GetString()))
+            {
+                entity.Description = description.Value.GetString()!;
+            }
+
+            return null;
+        }
+
+        private static string? ApplyMenuItemUpdate(MenuItemEntity entity, JsonElement updateData)
+        {
+            return ApplyPriceUpdate(entity, updateData)
+                ?? ApplyAvailabilityUpdate(entity, updateData)
+                ?? ApplyNameUpdate(entity, updateData)
+                ?? ApplyDescriptionUpdate(entity, updateData);
+        }
+
         // 1. POST /api/menu (CreateMenuItem)
         [Function("CreateMenuItem")]
         public async Task<HttpResponseData> CreateMenuItem(
@@ -56,15 +163,20 @@ namespace CoffeeNChill.Functions
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
                 // Deserialize JSON payload into MenuItemEntity model instance using case-insensitive matching
-                var item = JsonSerializer.Deserialize<MenuItemEntity>(requestBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                // Validate that payload contains critical PartitionKey (Category) and RowKey (SKU)
-                if (item == null || string.IsNullOrWhiteSpace(item.PartitionKey) || string.IsNullOrWhiteSpace(item.RowKey))
+                MenuItemEntity? item;
+                try
                 {
-                    // Create 400 Bad Request response if required properties are missing
-                    var badReq = req.CreateResponse(HttpStatusCode.BadRequest);
-                    await badReq.WriteStringAsync("PartitionKey (Category) and RowKey (SKU) are required.");
-                    return badReq;
+                    item = JsonSerializer.Deserialize<MenuItemEntity>(requestBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (JsonException)
+                {
+                    return await ErrorResponseAsync(req, HttpStatusCode.BadRequest, "Request body must contain valid JSON.");
+                }
+
+                var validationError = ValidateMenuItem(item);
+                if (validationError != null)
+                {
+                    return await ErrorResponseAsync(req, HttpStatusCode.BadRequest, validationError);
                 }
 
                 // Get table client handle
@@ -79,6 +191,11 @@ namespace CoffeeNChill.Functions
                 // Write created entity back as JSON response
                 await response.WriteAsJsonAsync(item);
                 return response;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 409)
+            {
+                _logger.LogWarning(ex, "Menu item already exists.");
+                return await ErrorResponseAsync(req, HttpStatusCode.Conflict, "A menu item with this category and SKU already exists.");
             }
             catch (Exception ex)
             {
@@ -116,6 +233,11 @@ namespace CoffeeNChill.Functions
                 await response.WriteAsJsonAsync(items);
                 return response;
             }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                _logger.LogWarning(ex, "Menu table was not found.");
+                return await ErrorResponseAsync(req, HttpStatusCode.NotFound, "Menu storage was not found.");
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error fetching all menu items.");
@@ -148,6 +270,11 @@ namespace CoffeeNChill.Functions
                 await response.WriteAsJsonAsync(items);
                 return response;
             }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                _logger.LogWarning(ex, "Menu table was not found while filtering.");
+                return await ErrorResponseAsync(req, HttpStatusCode.NotFound, "Menu storage was not found.");
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error querying menu items by category.");
@@ -177,7 +304,7 @@ namespace CoffeeNChill.Functions
                 if (!existingEntity.HasValue)
                 {
                     var notFound = req.CreateResponse(HttpStatusCode.NotFound);
-                    await notFound.WriteStringAsync("Menu item not found.");
+                    await notFound.WriteStringAsync(MenuItemNotFoundMessage);
                     return notFound;
                 }
 
@@ -185,46 +312,19 @@ namespace CoffeeNChill.Functions
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
                 using var updateDocument = JsonDocument.Parse(requestBody);
                 var updateData = updateDocument.RootElement;
-
-                JsonElement? FindProperty(string propertyName)
+                if (updateData.ValueKind != JsonValueKind.Object || !updateData.EnumerateObject().Any())
                 {
-                    foreach (var property in updateData.EnumerateObject())
-                    {
-                        if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return property.Value;
-                        }
-                    }
-
-                    return null;
+                    return await ErrorResponseAsync(req, HttpStatusCode.BadRequest, "At least one update field is required.");
                 }
 
                 var entityToUpdate = existingEntity.Value
                     ?? throw new InvalidOperationException("The menu item response did not contain an entity.");
 
                 // Update mutable fields only when they are present in the payload.
-                var price = FindProperty("price");
-                if (price?.ValueKind == JsonValueKind.Number && price.Value.TryGetDouble(out var priceValue))
+                var updateError = ApplyMenuItemUpdate(entityToUpdate, updateData);
+                if (updateError != null)
                 {
-                    entityToUpdate.Price = priceValue;
-                }
-
-                var isAvailable = FindProperty("isAvailable");
-                if (isAvailable?.ValueKind == JsonValueKind.True || isAvailable?.ValueKind == JsonValueKind.False)
-                {
-                    entityToUpdate.IsAvailable = isAvailable.Value.GetBoolean();
-                }
-
-                var name = FindProperty("name");
-                if (name?.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(name.Value.GetString()))
-                {
-                    entityToUpdate.Name = name.Value.GetString()!;
-                }
-
-                var description = FindProperty("description");
-                if (description?.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(description.Value.GetString()))
-                {
-                    entityToUpdate.Description = description.Value.GetString()!;
+                    return await ErrorResponseAsync(req, HttpStatusCode.BadRequest, updateError);
                 }
 
                 // Perform update merge in Azure Table Storage using wildcard ETag
@@ -233,6 +333,14 @@ namespace CoffeeNChill.Functions
                 var response = req.CreateResponse(HttpStatusCode.OK);
                 await response.WriteAsJsonAsync(entityToUpdate);
                 return response;
+            }
+            catch (JsonException)
+            {
+                return await ErrorResponseAsync(req, HttpStatusCode.BadRequest, "Request body must contain valid JSON.");
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                return await ErrorResponseAsync(req, HttpStatusCode.NotFound, MenuItemNotFoundMessage);
             }
             catch (Exception ex)
             {
@@ -256,6 +364,12 @@ namespace CoffeeNChill.Functions
             {
                 var client = GetTableClient();
 
+                var existingEntity = await client.GetEntityIfExistsAsync<MenuItemEntity>(category, id);
+                if (!existingEntity.HasValue)
+                {
+                    return await ErrorResponseAsync(req, HttpStatusCode.NotFound, MenuItemNotFoundMessage);
+                }
+
                 // Remove entity matching PartitionKey and RowKey using wildcard ETag
                 await client.DeleteEntityAsync(category, id, ETag.All);
 
@@ -263,6 +377,10 @@ namespace CoffeeNChill.Functions
                 var response = req.CreateResponse(HttpStatusCode.OK);
                 await response.WriteStringAsync($"Menu item '{id}' in category '{category}' deleted successfully.");
                 return response;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                return await ErrorResponseAsync(req, HttpStatusCode.NotFound, MenuItemNotFoundMessage);
             }
             catch (Exception ex)
             {
