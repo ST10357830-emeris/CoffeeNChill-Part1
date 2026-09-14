@@ -35,6 +35,7 @@ Terminal 1, Azurite:
 
 ```powershell
 $docker = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
+$env:Path = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin;$env:Path"
 & $docker pull mcr.microsoft.com/azure-storage/azurite
 & $docker rm -f coffeenchill-azurite 2>$null
 & $docker run --name coffeenchill-azurite -p 10000:10000 -p 10001:10001 -p 10002:10002 mcr.microsoft.com/azure-storage/azurite
@@ -44,6 +45,7 @@ Terminal 2, Functions:
 
 ```powershell
 $docker = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
+$env:Path = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin;$env:Path"
 dotnet publish --configuration Release --no-restore
 & $docker build -t khwinana/coffeenchill-functions:v1.1 .
 & $docker rm -f coffeenchill-functions 2>$null
