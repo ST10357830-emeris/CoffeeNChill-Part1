@@ -9,6 +9,24 @@ Azure Functions isolated worker for the CoffeeNChill menu and staff-document API
 - Docker Desktop
 - Postman
 
+### Docker command not found on Windows
+
+If PowerShell reports `docker: The term 'docker' is not recognized`, Docker Desktop may have been installed after the current VS Code window was opened. Close and reopen VS Code so its integrated terminal reloads the user `PATH`, then verify:
+
+```powershell
+docker version
+```
+
+If an existing terminal must be reused, refresh its `PATH` for the current session:
+
+```powershell
+$dockerDir = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin"
+$env:Path = "$dockerDir;$env:Path"
+docker version
+```
+
+The Docker CLI is installed at `$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe`. Docker Desktop must be running before `docker pull`, `docker build`, or `docker run` commands are used.
+
 ## Run locally with Azurite
 
 Start Azurite as a standalone container. Azurite's default ports are Blob `10000`, Queue `10001`, and Table `10002`:
