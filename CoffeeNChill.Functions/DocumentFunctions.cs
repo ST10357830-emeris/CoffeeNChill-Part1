@@ -1,11 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using Azure.Storage.Files.Shares;
-using Azure.Storage.Files.Shares.Models;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using HttpMultipartParser;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -17,28 +16,27 @@ namespace CoffeeNChill.Functions
     {
         private readonly ILogger<DocumentFunctions> _logger;
 
-        // Target Azure File Share specified in assignment specification
-        private const string ShareName = "staff-docs";
+        // Target Azure Blob container specified in the project addendum
+        private const string ContainerName = "staff-docs";
 
         public DocumentFunctions(ILogger<DocumentFunctions> logger)
         {
             _logger = logger;
         }
 
-        // Helper to retrieve initialized ShareDirectoryClient for the root directory of 'staff-docs'
-        private static async Task<ShareDirectoryClient> GetShareDirectoryClientAsync()
+        // Helper to retrieve the initialized Blob container client for 'staff-docs'
+        private static async Task<BlobContainerClient> GetContainerClientAsync()
         {
             string connectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage")
                 ?? throw new InvalidOperationException("AzureWebJobsStorage connection string is missing.");
 
-            // Instantiate ShareClient targeting 'staff-docs' share
-            var shareClient = new ShareClient(connectionString, ShareName);
+            var serviceClient = new BlobServiceClient(connectionString);
+            var containerClient = serviceClient.GetBlobContainerClient(ContainerName);
 
-            // Automatically provision file share if it does not exist
-            await shareClient.CreateIfNotExistsAsync();
+            // Automatically provision the document container if it does not exist
+            await containerClient.CreateIfNotExistsAsync();
 
-            // Return root directory client handle
-            return shareClient.GetRootDirectoryClient();
+            return containerClient;
         }
 
         // 1. POST /api/documents/upload (UploadStaffDocument)
@@ -46,7 +44,7 @@ namespace CoffeeNChill.Functions
         public async Task<HttpResponseData> UploadStaffDocument(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "documents/upload")] HttpRequestData req)
         {
-            _logger.LogInformation("Streaming document upload to staff-docs file share...");
+            _logger.LogInformation("Streaming document upload to staff-docs blob container...");
 
             try
             {
@@ -66,25 +64,19 @@ namespace CoffeeNChill.Functions
                 // Extract original filename
                 string fileName = Path.GetFileName(file.FileName);
 
-                // Get root directory client handle for 'staff-docs'
-                var rootDir = await GetShareDirectoryClientAsync();
+                var containerClient = await GetContainerClientAsync();
 
-                // Get client reference to target file path
-                var fileClient = rootDir.GetFileClient(fileName);
+                var blobClient = containerClient.GetBlobClient(fileName);
 
-                // Create empty target file on Azure File Share allocated with source file byte length
-                await fileClient.CreateAsync(file.Data.Length);
-
-                // Reset stream cursor position before binary transfer
                 file.Data.Position = 0;
 
-                // Stream file binary content directly into Azure File Share
-                await fileClient.UploadAsync(file.Data);
+                // Stream file binary content directly into Azure Blob Storage
+                await blobClient.UploadAsync(file.Data, overwrite: true);
 
                 var response = req.CreateResponse(HttpStatusCode.OK);
                 await response.WriteAsJsonAsync(new
                 {
-                    Message = "File uploaded successfully to staff-docs share.",
+                    Message = "File uploaded successfully to staff-docs blob container.",
                     FileName = fileName,
                     SizeBytes = file.Data.Length,
                     UploadedAt = DateTimeOffset.UtcNow
@@ -94,7 +86,7 @@ namespace CoffeeNChill.Functions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error uploading document to staff-docs.");
+                _logger.LogError(ex, "Error uploading document to staff-docs blob container.");
                 var err = req.CreateResponse(HttpStatusCode.InternalServerError);
                 await err.WriteStringAsync($"Internal Error: {ex.Message}");
                 return err;
@@ -106,35 +98,31 @@ namespace CoffeeNChill.Functions
         public async Task<HttpResponseData> ListStaffDocuments(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "documents")] HttpRequestData req)
         {
-            _logger.LogInformation("Listing files in staff-docs file share...");
+            _logger.LogInformation("Listing blobs in staff-docs container...");
 
             try
             {
-                var rootDir = await GetShareDirectoryClientAsync();
+                var containerClient = await GetContainerClientAsync();
 
-                var fileList = new List<object>();
+                var blobList = new List<object>();
 
-                await foreach (var item in rootDir.GetFilesAndDirectoriesAsync())
+                await foreach (BlobItem item in containerClient.GetBlobsAsync())
                 {
-                    if (!item.IsDirectory)
+                    blobList.Add(new
                     {
-                        long fileSize = item.FileSize.GetValueOrDefault();
-                        fileList.Add(new
-                        {
-                            FileName = item.Name,
-                            SizeBytes = fileSize,
-                            LastModified = item.Properties.LastModified
-                        });
-                    }
+                        FileName = item.Name,
+                        SizeBytes = item.Properties.ContentLength,
+                        LastModified = item.Properties.LastModified
+                    });
                 }
 
                 var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteAsJsonAsync(fileList);
+                await response.WriteAsJsonAsync(blobList);
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error listing documents in staff-docs.");
+                _logger.LogError(ex, "Error listing blobs in staff-docs container.");
                 var err = req.CreateResponse(HttpStatusCode.InternalServerError);
                 await err.WriteStringAsync($"Internal Error: {ex.Message}");
                 return err;
@@ -159,12 +147,12 @@ namespace CoffeeNChill.Functions
                     return badRequest;
                 }
 
-                var rootDir = await GetShareDirectoryClientAsync();
-                var fileClient = rootDir.GetFileClient(safeFileName);
-                var download = await fileClient.DownloadAsync();
+                var containerClient = await GetContainerClientAsync();
+                var blobClient = containerClient.GetBlobClient(safeFileName);
+                var download = await blobClient.DownloadStreamingAsync();
 
                 var response = req.CreateResponse(HttpStatusCode.OK);
-                response.Headers.Add("Content-Type", "application/octet-stream");
+                response.Headers.Add("Content-Type", download.Value.Details.ContentType ?? "application/octet-stream");
                 response.Headers.Add("Content-Disposition", $"attachment; filename=\"{safeFileName}\"");
                 await download.Value.Content.CopyToAsync(response.Body);
                 return response;
@@ -177,7 +165,7 @@ namespace CoffeeNChill.Functions
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error downloading staff document.");
+                _logger.LogError(ex, "Error downloading staff document blob.");
                 var err = req.CreateResponse(HttpStatusCode.InternalServerError);
                 await err.WriteStringAsync($"Internal Error: {ex.Message}");
                 return err;

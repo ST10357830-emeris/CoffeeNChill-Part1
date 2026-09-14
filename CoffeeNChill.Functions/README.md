@@ -1,6 +1,6 @@
 # CoffeeNChill Part 1
 
-Azure Functions isolated worker for the CoffeeNChill menu and staff-document APIs. The application uses Azure Table Storage for menu items and Azure Files for staff documents. Local development uses Azurite.
+Azure Functions isolated worker for the CoffeeNChill menu and staff-document APIs. The application uses Azure Table Storage for menu items and Azure Blob Storage for staff documents. Local development uses Azurite.
 
 ## Requirements
 
@@ -15,8 +15,7 @@ Start Azurite as a standalone container. Azurite's default ports are Blob `10000
 
 ```powershell
 docker pull mcr.microsoft.com/azure-storage/azurite
-docker network create coffeenchill-network
-docker run --name coffeenchill-azurite --network coffeenchill-network -p 10000:10000 -p 10001:10001 -p 10002:10002 mcr.microsoft.com/azure-storage/azurite
+docker run --name coffeenchill-azurite -p 10000:10000 -p 10001:10001 -p 10002:10002 mcr.microsoft.com/azure-storage/azurite
 ```
 
 The checked-in `local.settings.json` uses `UseDevelopmentStorage=true`, which is suitable when Functions Core Tools runs on the host. Start the Functions project with:
@@ -30,27 +29,20 @@ The API is available at `http://localhost:7071/api`.
 
 ## Run the Functions container
 
-Build the standalone image from this directory:
+Publish the project, then build the standalone image from this directory:
 
 ```powershell
+dotnet publish --configuration Release
 docker build -t <dockerhub-username>/coffeenchill-functions:v1.0 .
 ```
 
-When the Functions container connects to the Azurite container, use the Azurite container name in the storage endpoints:
+The Functions Dockerfile contains the Azurite connection string using `host.docker.internal`, so no connection string or `--network` option is needed when starting the Functions container:
 
 ```powershell
-$storage = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://coffeenchill-azurite:10000/devstoreaccount1;QueueEndpoint=http://coffeenchill-azurite:10001/devstoreaccount1;TableEndpoint=http://coffeenchill-azurite:10002/devstoreaccount1;"
-docker run --name coffeenchill-functions --network coffeenchill-network -p 7071:80 -e AzureWebJobsStorage=$storage -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e FUNCTIONS_WORKER_RUNTIME_VERSION=8.0 -e AzureFunctionsJobHost__Logging__Console__IsEnabled=true <dockerhub-username>/coffeenchill-functions:v1.0
+docker run --name coffeenchill-functions -p 7071:80 <dockerhub-username>/coffeenchill-functions:v1.0
 ```
 
-Azurite emulates Blob, Queue, and Table storage, but it does not emulate Azure Files. The menu endpoints can therefore run fully against Azurite. For the `staff-docs` endpoints, create an Azure Storage account and a File Share named `staff-docs`, then pass the complete Azure Storage connection string as `AzureWebJobsStorage` when running the Functions container. Do not combine Azurite endpoints with the Azure File endpoint.
-
-For the document endpoints, replace `$storage` with the complete connection string from that Azure Storage account before starting the Functions container:
-
-```powershell
-$storage = "<azure-storage-connection-string>"
-docker run --name coffeenchill-functions --network coffeenchill-network -p 7071:80 -e AzureWebJobsStorage=$storage -e FUNCTIONS_WORKER_RUNTIME=dotnet-isolated -e FUNCTIONS_WORKER_RUNTIME_VERSION=8.0 <dockerhub-username>/coffeenchill-functions:v1.0
-```
+The `staff-docs` Blob container is created automatically when the upload, list, or download endpoint is first called.
 
 Push the image after replacing the Docker Hub username:
 
@@ -61,7 +53,7 @@ docker push <dockerhub-username>/coffeenchill-functions:v1.0
 
 Published image: https://hub.docker.com/r/khwinana/coffeenchill-functions/tags
 
-Publish the Azurite image reference used by the demonstration as `<dockerhub-username>/coffeenchill-azurite:v1.0` only if your team tags and pushes a copy of the official image.
+For the assignment demonstration, use the official Azurite image directly. If your team must publish a tagged copy, tag and push it as `<dockerhub-username>/coffeenchill-azurite:v1.0`.
 
 ## Endpoints
 
