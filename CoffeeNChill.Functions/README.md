@@ -135,7 +135,7 @@ Example menu item JSON:
 
 ## Postman
 
-Import `docs/CoffeeNChill-Part1.postman_collection.json` into Postman. Set `baseUrl` to `http://localhost:7071/api` and set `filePath` to a local PDF or document before running the upload request. The collection covers every required menu and document endpoint.
+Import `docs/CoffeeNChill.postman_collection.json` into Postman. Set `baseUrl` to `http://localhost:7071/api` and set `filePath` to a local PDF or document before running the upload request. The collection covers every required menu and document endpoint.
 
 Run the `Menu` folder in this order: create, get all, category filter, update, delete, then invalid menu item. Run the `Documents` folder in this order: upload a PDF or text file, list documents, download the uploaded blob, then run the unsupported document type request with a `.gif` file. The saved tests verify success responses, structured 400 errors, metadata, and Blob MIME headers.
 
