@@ -27,6 +27,31 @@ docker version
 
 The Docker CLI is installed at `$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe`. Docker Desktop must be running before `docker pull`, `docker build`, or `docker run` commands are used.
 
+## Two-terminal Docker run
+
+Use these commands if the current VS Code terminal still reports that `docker` cannot be found. The `$docker` variable uses the absolute Docker Desktop CLI path and does not depend on the terminal `PATH`.
+
+Terminal 1, Azurite:
+
+```powershell
+$docker = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
+& $docker pull mcr.microsoft.com/azure-storage/azurite
+& $docker rm -f coffeenchill-azurite 2>$null
+& $docker run --name coffeenchill-azurite -p 10000:10000 -p 10001:10001 -p 10002:10002 mcr.microsoft.com/azure-storage/azurite
+```
+
+Terminal 2, Functions:
+
+```powershell
+$docker = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
+dotnet publish --configuration Release --no-restore
+& $docker build -t khwinana/coffeenchill-functions:v1.1 .
+& $docker rm -f coffeenchill-functions 2>$null
+& $docker run --name coffeenchill-functions -p 7071:80 khwinana/coffeenchill-functions:v1.1
+```
+
+After restarting VS Code, the equivalent commands can use `docker` directly because the Docker Desktop directory will be loaded into the new terminal's `PATH`.
+
 ## Run locally with Azurite
 
 Start Azurite as a standalone container. Azurite's default ports are Blob `10000`, Queue `10001`, and Table `10002`:
