@@ -1,0 +1,10 @@
+$kind: http-request
+url: "{{baseUrl}}/menu"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });
+      pm.test('returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });
+    language: text/javascript
+order: 2000

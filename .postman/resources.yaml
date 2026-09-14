@@ -1,0 +1,7 @@
+# Use this workspace to collaborate
+workspace:
+  id: cdd4f9f5-1f46-4959-8366-1289e0259f12
+
+localResources:
+  collections:
+    - ../CoffeeNChill.Functions/docs/CoffeeNChill Part 1

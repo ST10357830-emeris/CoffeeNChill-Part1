@@ -1,0 +1,10 @@
+$kind: http-request
+url: "{{baseUrl}}/documents/download/{{uploadedFileName}}"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });
+      pm.test('returns the stored MIME type', function () { pm.expect(pm.response.headers.get('Content-Type')).to.be.a('string'); });
+    language: text/javascript
+order: 3000

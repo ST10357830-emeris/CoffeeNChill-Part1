@@ -1,0 +1,23 @@
+$kind: http-request
+url: "{{baseUrl}}/menu"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "partitionKey": "{{category}}",
+      "rowKey": "{{itemId}}",
+      "name": "Espresso",
+      "description": "Double-shot espresso",
+      "price": 2.5,
+      "isAvailable": true
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('returns 201 Created', function () { pm.response.to.have.status(201); });
+      pm.test('returns the created item', function () { pm.expect(pm.response.json().rowKey).to.eql(pm.variables.get('itemId')); });
+    language: text/javascript
+order: 1000

@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/documents/upload"
+method: POST
+body:
+  type: formdata
+  content:
+    - type: file
+      key: file
+      src: "{{unsupportedFilePath}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('returns 400 Bad Request', function () { pm.response.to.have.status(400); });
+    language: text/javascript
+order: 4000

@@ -1,0 +1,20 @@
+$kind: http-request
+url: "{{baseUrl}}/menu/{{category}}/{{itemId}}"
+method: PUT
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "price": 3.0,
+      "isAvailable": false,
+      "description": "Temporarily unavailable"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });
+      pm.test('updates the price', function () { pm.expect(pm.response.json().price).to.eql(3); });
+    language: text/javascript
+order: 4000

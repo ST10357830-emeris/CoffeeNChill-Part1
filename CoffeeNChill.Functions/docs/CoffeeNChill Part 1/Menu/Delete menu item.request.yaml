@@ -1,0 +1,8 @@
+$kind: http-request
+url: "{{baseUrl}}/menu/{{category}}/{{itemId}}"
+method: DELETE
+scripts:
+  - type: afterResponse
+    code: pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });
+    language: text/javascript
+order: 5000

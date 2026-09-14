@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -8,14 +10,16 @@ using Azure;
 using Azure.Data.Tables;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi.Models;
 
 namespace CoffeeNChill.Functions
 {
     public class MenuFunctions
     {
         // Logger instance injected via Dependency Injection
-        private readonly ILogger<MenuFunctions> _logger;
+        private readonly ILogger _logger;
 
         // Name of the target Azure Storage Table specified in assignment instructions
         private const string TableName = "MenuItems";
@@ -24,7 +28,7 @@ namespace CoffeeNChill.Functions
         private const double MaxPrice = 10000;
 
         // Constructor receiving ILogger dependency from isolated host runner
-        public MenuFunctions(ILogger<MenuFunctions> logger)
+        public MenuFunctions(ILogger logger)
         {
             _logger = logger;
         }
@@ -152,6 +156,11 @@ namespace CoffeeNChill.Functions
 
         // 1. POST /api/menu (CreateMenuItem)
         [Function("CreateMenuItem")]
+        [OpenApiOperation(operationId: "CreateMenuItem", tags: new[] { "Menu" }, Summary = "Create a new menu item", Description = "Adds a new MenuItemEntity to Azure Table Storage.")]
+        [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(MenuItemEntity), Required = true, Description = "The menu item details to create.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(MenuItemEntity), Description = "Menu item successfully created.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.BadRequest, contentType: "application/json", bodyType: typeof(object), Description = "Invalid payload or validation failure.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.Conflict, contentType: "application/json", bodyType: typeof(object), Description = "Menu item already exists.")]
         public async Task<HttpResponseData> CreateMenuItem(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "menu")] HttpRequestData req)
         {
@@ -183,7 +192,7 @@ namespace CoffeeNChill.Functions
                 var client = GetTableClient();
 
                 // Persist new entity into MenuItems Azure Table Storage
-                await client.AddEntityAsync(item);
+                await client.AddEntityAsync(item!);
 
                 // Build 201 Created HTTP response
                 var response = req.CreateResponse(HttpStatusCode.Created);
@@ -208,6 +217,8 @@ namespace CoffeeNChill.Functions
 
         // 2. GET /api/menu (GetAllMenuItems)
         [Function("GetAllMenuItems")]
+        [OpenApiOperation(operationId: "GetAllMenuItems", tags: new[] { "Menu" }, Summary = "Get all menu items", Description = "Retrieves all items stored in the MenuItems table.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(IEnumerable), Description = "List of all menu items.")]
         public async Task<HttpResponseData> GetAllMenuItems(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "menu")] HttpRequestData req)
         {
@@ -249,9 +260,12 @@ namespace CoffeeNChill.Functions
 
         // 3. GET /api/menu/category/{category} (GetMenuItemsByCategory)
         [Function("GetMenuItemsByCategory")]
+        [OpenApiOperation(operationId: "GetMenuItemsByCategory", tags: new[] { "Menu" }, Summary = "Get menu items by category", Description = "Queries items filtered by PartitionKey.")]
+        [OpenApiParameter(name: "category", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "The PartitionKey/Category of the item.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(IEnumerable), Description = "Filtered menu items.")]
         public async Task<HttpResponseData> GetMenuItemsByCategory(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "menu/category/{category}")] HttpRequestData req,
-            string category) // Path parameter category bound automatically
+            string category)
         {
             _logger.LogInformation("Filtering menu items by category: {Category}", category);
 
@@ -286,6 +300,12 @@ namespace CoffeeNChill.Functions
 
         // 4. PUT /api/menu/{category}/{id} (UpdateMenuItem)
         [Function("UpdateMenuItem")]
+        [OpenApiOperation(operationId: "UpdateMenuItem", tags: new[] { "Menu" }, Summary = "Update an existing menu item", Description = "Merges updated field values for a specific item.")]
+        [OpenApiParameter(name: "category", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "The PartitionKey (Category).")]
+        [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "The RowKey (SKU).")]
+        [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(object), Required = true, Description = "JSON object with fields to update.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(MenuItemEntity), Description = "Updated menu item.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.NotFound, contentType: "application/json", bodyType: typeof(object), Description = "Item not found.")]
         public async Task<HttpResponseData> UpdateMenuItem(
             [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "menu/{category}/{id}")] HttpRequestData req,
             string category, // PartitionKey from URL path
@@ -353,6 +373,11 @@ namespace CoffeeNChill.Functions
 
         // 5. DELETE /api/menu/{category}/{id} (DeleteMenuItem)
         [Function("DeleteMenuItem")]
+        [OpenApiOperation(operationId: "DeleteMenuItem", tags: new[] { "Menu" }, Summary = "Delete a menu item", Description = "Deletes a specific item by PartitionKey and RowKey.")]
+        [OpenApiParameter(name: "category", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "The PartitionKey (Category).")]
+        [OpenApiParameter(name: "id", In = ParameterLocation.Path, Required = true, Type = typeof(string), Description = "The RowKey (SKU).")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "text/plain", bodyType: typeof(string), Description = "Success message.")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.NotFound, contentType: "application/json", bodyType: typeof(object), Description = "Item not found.")]
         public async Task<HttpResponseData> DeleteMenuItem(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "menu/{category}/{id}")] HttpRequestData req,
             string category, // PartitionKey

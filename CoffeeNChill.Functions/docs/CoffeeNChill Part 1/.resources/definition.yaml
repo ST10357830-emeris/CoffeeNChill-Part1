@@ -1,0 +1,9 @@
+$kind: collection
+description: Postman tests for the CoffeeNChill Azure Functions menu and staff document APIs.
+variables:
+  baseUrl: http://localhost:7071/api
+  category: Hot Drinks
+  itemId: COF-001
+  uploadedFileName: ""
+  filePath: C:/path/to/recipe.pdf
+  unsupportedFilePath: C:/path/to/image.gif
