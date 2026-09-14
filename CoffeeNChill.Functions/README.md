@@ -157,15 +157,6 @@ Run the `Menu` folder in this order: create, get all, category filter, update, d
 - Commit and push the repository using each student's individual GitHub account.
 - Keep at least five meaningful commits per student for this part.
 - Add the public Docker Hub image link above or in the project submission notes.
-- Add the unlisted demonstration video link to this README after recording the voiceover and Postman run.
-- Record team contributions below.
-
-### Team contributions
-
-| Team member | Contribution |
-| --- | --- |
-| Add name | Add contribution |
-| Add name | Add contribution |
 
 ### Demonstration video
 
